@@ -16,7 +16,11 @@ import bs58 from "bs58";
 
 import "dotenv/config";
 
-const TATE_SHITCOIN = "4Cnk9EPnW5ixfLZatCPJjDB1PUtcRpVVgTQukm9epump";
+const BLOCKED_TOKENS = [
+  "4Cnk9EPnW5ixfLZatCPJjDB1PUtcRpVVgTQukm9epump".toLowerCase(),
+  "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN".toLowerCase(),
+  "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P".toLowerCase(),
+];
 
 const USER_PUBLIC_KEY = "HUUFZZZWSSy3JDxHdA1ogNqojmM7WJWUs7reMuPHgWNY";
 
@@ -277,7 +281,7 @@ router.post(
         const validAddresses = matches.filter(
           (address) =>
             isValidSolanaAddress(address) &&
-            address.toLowerCase() !== TATE_SHITCOIN.toLowerCase()
+            !BLOCKED_TOKENS.includes(address.toLowerCase())
         );
 
         console.log("validAddresses:", validAddresses);
