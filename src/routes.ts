@@ -21,7 +21,7 @@ import { TokenInfo } from "../types/express";
 
 const BLOCKED_TOKENS = [
   "4Cnk9EPnW5ixfLZatCPJjDB1PUtcRpVVgTQukm9epump".toLowerCase(),
-  "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN".toLowerCase(),
+  // "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN".toLowerCase(),
   "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P".toLowerCase(),
 ];
 
