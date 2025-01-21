@@ -4,6 +4,8 @@ import Tesseract from "tesseract.js";
 import fetch, { Response as NodeFetchResponse } from "node-fetch";
 import { IncomingHttpHeaders } from "http";
 import { Request as ExpressRequest } from "express";
+import { TOKEN_PROGRAM_ID, Token } from "@solana/spl-token";
+
 import {
   Connection,
   Keypair,
@@ -15,6 +17,7 @@ import JSBI from "jsbi";
 import bs58 from "bs58";
 
 import "dotenv/config";
+import { TokenInfo } from "../types/express";
 
 const BLOCKED_TOKENS = [
   "4Cnk9EPnW5ixfLZatCPJjDB1PUtcRpVVgTQukm9epump".toLowerCase(),
@@ -22,7 +25,7 @@ const BLOCKED_TOKENS = [
   "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P".toLowerCase(),
 ];
 
-const USER_PUBLIC_KEY = "HUUFZZZWSSy3JDxHdA1ogNqojmM7WJWUs7reMuPHgWNY";
+const USER_PUBLIC_KEY = process.env.USER_PUBLIC_KEY || "";
 
 const SECRET: string = import.meta.env.VITE_HOOKDECK_SIGNING_SECRET || "";
 
@@ -169,8 +172,42 @@ function normalizeText(text: string): string {
  * Supports finding best routes and executing swaps
  ***********************************************************************************************/
 const connection = new Connection(
-  process.env.RPC_ENDPOINT || "https://api.mainnet-beta.solana.com"
+  process.env.RPC_URL || "https://api.mainnet-beta.solana.com"
 );
+
+/***********************************************************************************************
+ * Token Information
+ * Fetches detailed token information including:
+ * - Supply
+ * - Decimals
+ * - Token metadata if available
+ ***********************************************************************************************/
+async function getTokenInfo(address: string): Promise<TokenInfo | null> {
+  try {
+    const mint = new PublicKey(address);
+    const token = new Token(
+      connection,
+      mint,
+      TOKEN_PROGRAM_ID,
+      // @ts-ignore - dummy signer for readonly operations
+      null
+    );
+
+    const supply = await token.getMintInfo();
+    if (!supply.decimals) {
+      return null;
+    }
+    return {
+      address,
+      decimals: supply.decimals,
+      supply: supply.supply.toString(),
+      isInitialized: supply.isInitialized,
+    };
+  } catch (error) {
+    console.error("Error getting token info:", error);
+    return null;
+  }
+}
 
 /***********************************************************************************************
  * Jupiter Integration
@@ -229,26 +266,26 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const user = req.body.task?.user;
-      const text = req.body.data?.text || "";
+      const text = (req.body.data?.text || "").replace(/\s+/g, ""); // text from the image parsed by tweet-catcher
       const fulltext = req.body.data?.full_text || "";
       const imageUrl = req.body.data?.image;
 
       let amount;
-      if (user === "DaniilP80268") {
+      if (user === "DaniilP86141") {
         amount = 1000000; // 1 USDC
       } else {
         amount = 1000000000; // 1000 USDC
       }
 
       let maxLamports;
-      if (user === "DaniilP80268") {
+      if (user === "DaniilP86141") {
         maxLamports = 100000000; // 0.1 SOL
       } else {
         maxLamports = 1000000000; // 1 SOL
       }
 
       let priorityLevel;
-      if (user === "DaniilP80268") {
+      if (user === "DaniilP86141") {
         priorityLevel = "medium";
       } else {
         priorityLevel = "veryHigh";
@@ -274,8 +311,16 @@ router.post(
       console.log("Normalized combined text:", combinedText);
 
       // Find all potential Solana addresses in the normalized text
-      const matches = combinedText.match(SOLANA_ADDRESS_REGEX);
+      const matches = [];
 
+      for (let i = 0; i < combinedText.length - 44; i++) {
+        const word = combinedText.slice(i, i + 44);
+        const match = word.match(SOLANA_ADDRESS_REGEX);
+        if (match) {
+          matches.push(match[0]);
+        }
+      }
+      console.log("Reg exp matches:", matches);
       if (matches && matches.length > 0) {
         // Filter valid addresses
         const validAddresses = matches.filter(
@@ -287,29 +332,46 @@ router.post(
         console.log("validAddresses:", validAddresses);
         if (validAddresses.length > 0) {
           // For each valid token address, get price info
-          const quotePromises = validAddresses.map(async (address) => {
+          const tokenInfoPromises = validAddresses.map(async (address) => {
             return new Promise(async (resolve, reject) => {
-              const quote = await getQuote(
-                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC mint
-                address,
-                amount,
-                5000
-              );
-              if ((quote as any).routePlan) {
-                resolve(quote);
-              } else {
-                reject(new Error("No quote found"));
+              try {
+                const tokenInfo = await getTokenInfo(address);
+                console.log("tokenInfo:", tokenInfo);
+
+                if (tokenInfo) {
+                  resolve(tokenInfo);
+                } else {
+                  reject(new Error("No token info found"));
+                }
+              } catch (error) {
+                reject(error);
               }
             });
           });
-          console.log("quotePromises:", quotePromises);
-          const quoteInfo = await Promise.any(quotePromises);
-          console.log("quoteInfo:", quoteInfo);
-          const swapTx = await getSwapTx(
-            quoteInfo as NodeFetchResponse,
-            maxLamports,
-            priorityLevel
-          );
+
+          console.log("tokenInfoPromises:", tokenInfoPromises);
+          const tokenInfo = (await Promise.any(
+            tokenInfoPromises
+          )) as TokenInfo | null;
+          console.log("tokenInfo:", tokenInfo);
+
+          const quote = tokenInfo
+            ? await getQuote(
+                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC mint
+                tokenInfo.address,
+                amount,
+                5000
+              )
+            : null;
+
+          const swapTx = quote
+            ? await getSwapTx(
+                quote as NodeFetchResponse,
+                maxLamports,
+                priorityLevel
+              )
+            : null;
+
           console.log("swapTx:", swapTx);
           // deserialize the transaction
           const swapTransactionBuf = Buffer.from(

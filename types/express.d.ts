@@ -14,3 +14,10 @@ interface WebhookPayload {
     image_url?: string;
   };
 }
+
+export type TokenInfo = {
+  address: string;
+  decimals: number;
+  supply: string;
+  isInitialized: boolean;
+};
