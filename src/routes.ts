@@ -228,7 +228,7 @@ router.post(
   verifyHookdeckSignature,
   async (req: Request, res: Response) => {
     try {
-      const user = req.body.data?.user.screen_name;
+      const user = req.body.task?.user;
       const text = req.body.data?.text || "";
       const fulltext = req.body.data?.full_text || "";
       const imageUrl = req.body.data?.image;
