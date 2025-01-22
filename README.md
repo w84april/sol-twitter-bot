@@ -1,6 +1,6 @@
 # A Simple Nodejs API
 
-Made for fun for personal use
+Made for fun for personal use \
 Will beautify at some point 
 
 [slack-badge]: https://img.shields.io/badge/Slack-Hookdeck%20Developers-blue?logo=slack
