@@ -313,8 +313,8 @@ router.post(
       // Find all potential Solana addresses in the normalized text
       const matches = [];
 
-      for (let i = 0; i < combinedText.length - 44; i++) {
-        const word = combinedText.slice(i, i + 44);
+      for (let i = 0; i < combinedText.length; i++) {
+        const word = combinedText.slice(i, i + 45);
         const match = word.match(SOLANA_ADDRESS_REGEX);
         if (match) {
           matches.push(match[0]);
