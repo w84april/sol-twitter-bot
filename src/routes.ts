@@ -5,6 +5,7 @@ import fetch, { Response as NodeFetchResponse } from "node-fetch";
 import { IncomingHttpHeaders } from "http";
 import { Request as ExpressRequest } from "express";
 import { TOKEN_PROGRAM_ID, Token } from "@solana/spl-token";
+import { getJupiterTx } from "./utils/jupiter";
 
 import {
   Connection,
@@ -18,6 +19,7 @@ import bs58 from "bs58";
 
 import "dotenv/config";
 import { TokenInfo } from "../types/express";
+import { getPumpTx } from "./utils/pump";
 
 const BLOCKED_TOKENS = [
   "4Cnk9EPnW5ixfLZatCPJjDB1PUtcRpVVgTQukm9epump".toLowerCase(),
@@ -209,52 +211,19 @@ async function getTokenInfo(address: string): Promise<TokenInfo | null> {
   }
 }
 
-/***********************************************************************************************
- * Jupiter Integration
- * Enhanced with token validation and swap functionality
- ***********************************************************************************************/
-async function getQuote(
-  inputMint: string,
-  outputMint: string,
-  amount: number,
-  slippageBps: number = 5000
-) {
-  const amountBigInt = JSBI.BigInt(amount.toString());
-
-  try {
-    const quote = await fetch(
-      `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountBigInt}&slippageBps=${slippageBps}`
-    );
-    return await quote.json();
-  } catch (error) {
-    console.error("Error getting quote:", error);
-    return null;
+const getAmount = (address: string, user: string) => {
+  if (user === "DaniilP86141") {
+    if (address.includes("pump")) {
+      return 10000000; // 0.01 SOL
+    }
+    return 100000; // 0.1 USDC
   }
-}
 
-async function getSwapTx(
-  quote: NodeFetchResponse,
-  maxLamports: number,
-  priorityLevel: string
-) {
-  const body = {
-    quoteResponse: quote,
-    userPublicKey: USER_PUBLIC_KEY,
-    prioritizationFeeLamports: {
-      priorityLevelWithMaxLamports: {
-        maxLamports,
-        priorityLevel, // If you want to land transaction fast, set this to use `veryHigh`. You will pay on average higher priority fee.
-      },
-    },
-  };
-  console.log("body:", body);
-  const response = await fetch("https://quote-api.jup.ag/v6/swap", {
-    method: "post",
-    body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
-  });
-  return await response.json();
-}
+  if (address.includes("pump")) {
+    return 500000000; // 0.5 SOL
+  }
+  return 1000000000; // 1000 USDC
+};
 
 /***********************************************************************************************
  * Webhook Handler
@@ -265,21 +234,11 @@ router.post(
   verifyHookdeckSignature,
   async (req: Request, res: Response) => {
     try {
+      console.log("pump");
       const user = req.body.task?.user;
       const text = (req.body.data?.text || "").replace(/\s+/g, ""); // text from the image parsed by tweet-catcher
       const fulltext = req.body.data?.full_text || "";
       const imageUrl = req.body.data?.image;
-
-      let amount;
-      if (user === "DaniilP86141") {
-        amount = 1000000; // 1 USDC
-      } else {
-        if (user === "mrpunkdoteth") {
-          amount = 200000000; // 200 USDC
-        } else {
-          amount = 1000000000; // 1000 USDC
-        }
-      }
 
       let maxLamports;
       if (user === "DaniilP86141") {
@@ -354,39 +313,30 @@ router.post(
           });
 
           console.log("tokenInfoPromises:", tokenInfoPromises);
+
           const tokenInfo = (await Promise.any(
             tokenInfoPromises
           )) as TokenInfo | null;
+
           console.log("tokenInfo:", tokenInfo);
 
-          const quote = tokenInfo
-            ? await getQuote(
-                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC mint
-                tokenInfo.address,
-                amount,
-                5000
-              )
-            : null;
-
-          const swapTx = quote
-            ? await getSwapTx(
-                quote as NodeFetchResponse,
-                maxLamports,
-                priorityLevel
-              )
-            : null;
-
-          console.log("swapTx:", swapTx);
-          // deserialize the transaction
-          const swapTransactionBuf = Buffer.from(
-            (swapTx as any).swapTransaction,
-            "base64"
+          // const transaction = await getJupiterTx(
+          //   tokenInfo?.address,
+          //   amount,
+          //   maxLamports,
+          //   priorityLevel
+          // );
+          const amount = getAmount(tokenInfo?.address, user);
+          console.log("amount:", amount);
+          const transaction = await getPumpTx(
+            tokenInfo?.address,
+            amount.toString(),
+            priorityLevel
           );
 
-          var transaction =
-            VersionedTransaction.deserialize(swapTransactionBuf);
-          console.log("transaction:", transaction);
-          // sign the transaction
+          console.log("pumpfun transaction:", transaction);
+
+          // sign the transaction.
           transaction.sign([from]);
 
           // get the latest block hash
