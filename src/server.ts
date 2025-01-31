@@ -14,7 +14,7 @@ app.use(bodyParser.urlencoded({ extended: false, verify: setRawBody }));
 app.use(bodyParser.json({ verify: setRawBody }));
 
 // Set port
-const port: string | number = process.env.PORT || "1337";
+const port: string | number = process.env.PORT || "1338";
 app.set("port", port);
 
 app.use("/", routes);
