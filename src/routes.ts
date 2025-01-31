@@ -274,7 +274,11 @@ router.post(
       if (user === "DaniilP86141") {
         amount = 1000000; // 1 USDC
       } else {
-        amount = 1000000000; // 1000 USDC
+        if (user === "mrpunkdoteth") {
+          amount = 200000000; // 200 USDC
+        } else {
+          amount = 1000000000; // 1000 USDC
+        }
       }
 
       let maxLamports;
